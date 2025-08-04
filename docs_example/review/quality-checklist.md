@@ -15,6 +15,47 @@
 
 ---
 
+## ⚙️ 검토 시작 전 준비사항
+
+### 🛠️ 필수 도구 설치
+```bash
+# .NET 프로젝트용 도구
+dotnet tool install --global dotnet-reportgenerator-globaltool
+dotnet tool install --global Microsoft.CodeAnalysis.Metrics
+dotnet tool install --global dotnet-trace
+dotnet tool install --global dotnet-counters
+
+# 코드 품질 분석 도구
+dotnet add package Microsoft.CodeAnalysis.Analyzers
+dotnet add package SonarAnalyzer.CSharp
+```
+
+### 📂 검토 환경 설정
+1. **프로젝트 빌드 확인**
+   ```bash
+   dotnet clean
+   dotnet build /warnaserror
+   ```
+
+2. **테스트 실행 및 커버리지 측정**
+   ```bash
+   dotnet test --collect:"XPlat Code Coverage"
+   reportgenerator -reports:"**/coverage.cobertura.xml" -targetdir:"coveragereport" -reporttypes:Html
+   ```
+
+3. **정적 분석 실행**
+   ```bash
+   dotnet build /p:RunAnalyzersDuringBuild=true
+   ```
+
+### 📋 검토 체크리스트 템플릿 준비
+- [ ] 검토 보고서 템플릿 생성
+- [ ] 스크린샷 캡처 도구 준비
+- [ ] 성능 측정 도구 설정
+- [ ] 에러 로그 수집 준비
+
+---
+
 ## 🎯 1단계: 사용자 입장 검증
 
 ### 🎨 사용성 (Usability)
@@ -42,7 +83,32 @@
   - 색상 대비가 충분한가?
 ```
 
+#### 🔍 실행 가이드
+1. **사용자 시나리오 테스트**
+   ```
+   - 신규 사용자 관점에서 기능 실행
+   - 시작부터 완료까지 소요 시간 측정
+   - 각 단계별 사용자 경험 기록
+   ```
+
+2. **접근성 검증 도구**
+   ```bash
+   # 웹 접근성 검사 (웹 프로젝트인 경우)
+   npm install -g @axe-core/cli
+   axe http://localhost:5000
+   
+   # 색상 대비 검사
+   npm install -g pa11y
+   pa11y http://localhost:5000
+   ```
+
+3. **사용성 평가 체크**
+   - [ ] README.md 따라 5분 내 설치/실행 가능한가?
+   - [ ] 에러 발생 시 로그에서 원인 파악 가능한가?
+   - [ ] 설정 변경이 직관적인가?
+
 **평가 결과**: [ ✅ / ⚠️ / ❌ ]  
+**측정 지표**: 첫 사용 소요시간: ___분, 에러 이해도: ___/10점  
 **개선 사항**: ________________
 
 ### 📝 명확성 (Clarity)
@@ -131,7 +197,132 @@
 
 ---
 
-## 🔧 2단계: 일반화 검증
+## 💻 2A단계: 코드 품질 검증
+
+### 📏 5Line 원칙 준수
+```
+목적: 함수의 복잡도를 제한하여 가독성과 유지보수성을 향상시킨다
+
+□ 모든 메서드가 5라인 이내인가?
+  - 메서드 시그니처 제외하고 실제 로직 5라인 이내
+  - 중괄호만 있는 라인은 제외
+  - 주석은 라인 수에서 제외
+
+□ 5라인을 초과하는 경우 적절한 분해가 되었는가?
+  - 단일 책임 원칙에 따른 메서드 분리
+  - 의미 있는 메서드명으로 분해
+  - 과도한 파라미터 전달 방지
+
+□ 조건문과 반복문이 적절히 처리되었는가?
+  - 중첩된 if문을 Early Return으로 개선
+  - 복잡한 조건식을 별도 메서드로 추출
+  - LINQ나 함수형 접근으로 반복문 대체
+```
+
+#### 🔍 실행 가이드
+```bash
+# 코드 메트릭 측정
+dotnet tool install --global Microsoft.CodeAnalysis.Metrics
+metrics --project YourProject.csproj --format json
+
+# 긴 메서드 찾기 (PowerShell)
+Get-ChildItem -Path src -Recurse -Filter "*.cs" | ForEach-Object {
+    $content = Get-Content $_.FullName
+    # 메서드별 라인 수 계산 로직 구현
+}
+
+# SonarQube 분석 (복잡도 측정)
+dotnet sonarscanner begin /k:"project-key"
+dotnet build
+dotnet sonarscanner end
+```
+
+**평가 결과**: [ ✅ / ⚠️ / ❌ ]  
+**측정 지표**: 평균 메서드 길이: ___라인, 5라인 초과 메서드: ___개  
+**개선 사항**: ________________
+
+### 🏛️ Clean Architecture 준수
+```
+목적: 계층 간 의존성 규칙을 준수하여 유지보수 가능한 구조를 유지한다
+
+□ 의존성 방향이 올바른가?
+  - Web → Application → Domain
+  - Infrastructure → Application
+  - Domain은 외부 의존성 없음
+
+□ 각 계층의 책임이 명확한가?
+  - Domain: 비즈니스 규칙, 엔티티, 도메인 서비스
+  - Application: 애플리케이션 서비스, Use Case
+  - Infrastructure: 외부 시스템 연동, 데이터 접근
+  - Web: API 컨트롤러, 프레젠테이션 로직
+
+□ 인터페이스 분리 원칙을 준수하는가?
+  - Domain에서 인터페이스 정의
+  - Infrastructure에서 구현
+  - DI를 통한 의존성 주입
+
+□ 순환 참조가 없는가?
+  - 계층 간 순환 참조 확인
+  - 패키지 간 순환 참조 확인
+```
+
+#### 🔍 실행 가이드
+```bash
+# 의존성 분석
+dotnet list package --include-transitive
+dotnet tool install --global deptrac
+deptrac analyze
+
+# 아키텍처 검증 스크립트
+# 프로젝트 참조 관계 확인
+dotnet sln list | grep -E "(Domain|Application|Infrastructure|Web)"
+```
+
+**평가 결과**: [ ✅ / ⚠️ / ❌ ]  
+**측정 지표**: 순환 참조: ___개, 계층 위반: ___개  
+**개선 사항**: ________________
+
+### 🧪 테스트 커버리지 확인
+```
+목적: 높은 품질의 테스트를 통해 코드의 신뢰성을 보장한다
+
+□ 테스트 커버리지가 충분한가?
+  - 라인 커버리지 80% 이상
+  - 브랜치 커버리지 70% 이상
+  - 핵심 비즈니스 로직 100% 커버리지
+
+□ 테스트가 독립적인가?
+  - 테스트 간 의존성 없음
+  - 실행 순서와 무관하게 동작
+  - 외부 상태에 의존하지 않음
+
+□ 테스트가 명확한가?
+  - 테스트명이 의도를 명확히 표현
+  - AAA 패턴 (Arrange-Act-Assert) 준수
+  - 하나의 테스트는 하나의 관심사만 검증
+```
+
+#### 🔍 실행 가이드
+```bash
+# 테스트 커버리지 측정
+dotnet test --collect:"XPlat Code Coverage"
+reportgenerator -reports:"**/coverage.cobertura.xml" -targetdir:"coveragereport" -reporttypes:Html
+
+# 테스트 품질 체크
+dotnet test --logger:trx --collect:"Code Coverage"
+
+# Mutation Testing (선택사항)
+dotnet tool install --global dotnet-stryker
+dotnet stryker
+```
+
+**평가 결과**: [ ✅ / ⚠️ / ❌ ]  
+**측정 지표**: 라인 커버리지: ___%,  브랜치 커버리지: ___%  
+**개선 사항**: ________________
+
+---
+
+## 🔧 2B단계: 일반화 검증
 
 ### ✅ 요구사항 준수
 ```
@@ -270,7 +461,39 @@
   - 불필요한 연산이 최소화되었는가?
 ```
 
+#### 🔍 실행 가이드
+```bash
+# 성능 프로파일링
+dotnet tool install --global dotnet-trace
+dotnet tool install --global dotnet-counters
+dotnet tool install --global dotnet-dump
+
+# 기본 성능 측정
+dotnet-counters monitor --name YourAppName
+
+# 상세 트레이스 수집
+dotnet-trace collect --name YourAppName --output trace.nettrace
+
+# 메모리 덤프 분석
+dotnet-dump collect --name YourAppName
+
+# 부하 테스트 (NBomber 사용 예시)
+dotnet add package NBomber
+# 부하 테스트 스크립트 작성 및 실행
+
+# API 성능 테스트 (k6 사용)
+k6 run load-test.js
+```
+
+#### 📊 성능 기준 체크리스트
+- [ ] API 응답 시간 < 200ms (95 percentile)
+- [ ] 메모리 사용량 < 512MB (일반적인 경우)
+- [ ] CPU 사용률 < 70% (평균)
+- [ ] 동시 사용자 ___명 이상 지원
+- [ ] 처리량 ___TPS 이상
+
 **평가 결과**: [ ✅ / ⚠️ / ❌ ]  
+**측정 지표**: 응답시간: ___ms, 처리량: ___TPS, 메모리: ___MB  
 **개선 사항**: ________________
 
 ---
@@ -432,18 +655,28 @@
 
 ### 점수 계산
 - **1단계 (사용자 입장)**: ___/40점 (각 항목 10점)
-- **2단계 (일반화)**: ___/50점 (각 항목 10점)  
+- **2A단계 (코드 품질)**: ___/60점 (5Line 20점, Clean Architecture 20점, 테스트 20점)
+- **2B단계 (일반화)**: ___/50점 (각 항목 10점)  
 - **3단계 (한계점)**: ___/30점 (각 항목 10점)
 - **4단계 (문제 대처)**: ___/20점 (각 항목 10점)
 
-**총점**: ___/140점
+**총점**: ___/200점
 
 ### 품질 등급
-- **A등급 (126-140점)**: 출시 가능, 높은 품질
-- **B등급 (112-125점)**: 출시 가능, 일반적 품질  
-- **C등급 (98-111점)**: 개선 후 출시 권장
-- **D등급 (84-97점)**: 상당한 개선 필요
-- **F등급 (84점 미만)**: 출시 불가, 전면 재검토 필요
+- **S등급 (180-200점)**: 최고 품질, 모범 사례
+- **A등급 (160-179점)**: 우수 품질, 출시 권장
+- **B등급 (140-159점)**: 양호 품질, 출시 가능
+- **C등급 (120-139점)**: 개선 후 출시 권장
+- **D등급 (100-119점)**: 상당한 개선 필요
+- **F등급 (100점 미만)**: 출시 불가, 전면 재작업 필요
+
+### 🎯 필수 통과 기준
+**다음 조건을 모두 만족해야 출시 가능:**
+- [ ] 5Line 원칙 준수율 90% 이상
+- [ ] Clean Architecture 의존성 규칙 100% 준수
+- [ ] 테스트 커버리지 80% 이상
+- [ ] 보안 취약점 Critical 0개
+- [ ] 성능 요구사항 100% 충족
 
 ## 📝 최종 검토 의견
 
@@ -464,6 +697,184 @@
 
 ---
 
+## 🛠️ 자동화 도구 및 스크립트
+
+### 📜 품질 검증 자동화 스크립트
+```powershell
+# PowerShell 스크립트: QualityCheck.ps1
+param(
+    [string]$ProjectPath = ".",
+    [string]$OutputPath = "quality-report"
+)
+
+Write-Host "🔍 품질 검증 시작..." -ForegroundColor Green
+
+# 1. 빌드 검증
+Write-Host "📦 빌드 검증 중..." -ForegroundColor Yellow
+dotnet clean $ProjectPath
+dotnet build $ProjectPath /warnaserror
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "❌ 빌드 실패" -ForegroundColor Red
+    exit 1
+}
+
+# 2. 테스트 실행 및 커버리지
+Write-Host "🧪 테스트 및 커버리지 측정 중..." -ForegroundColor Yellow
+dotnet test $ProjectPath --collect:"XPlat Code Coverage" --logger:trx
+reportgenerator -reports:"**/coverage.cobertura.xml" -targetdir:"$OutputPath/coverage" -reporttypes:Html
+
+# 3. 정적 분석
+Write-Host "🔍 정적 분석 실행 중..." -ForegroundColor Yellow
+dotnet build $ProjectPath /p:RunAnalyzersDuringBuild=true
+
+# 4. 성능 메트릭
+Write-Host "📊 성능 메트릭 수집 중..." -ForegroundColor Yellow
+# 여기에 성능 테스트 스크립트 추가
+
+# 5. 5Line 체크
+Write-Host "📏 5Line 원칙 검증 중..." -ForegroundColor Yellow
+# 메서드 길이 체크 스크립트
+
+Write-Host "✅ 품질 검증 완료!" -ForegroundColor Green
+Write-Host "📋 보고서 위치: $OutputPath" -ForegroundColor Cyan
+```
+
+### 🔧 개발 환경 설정 스크립트
+```bash
+#!/bin/bash
+# setup-quality-tools.sh
+
+echo "🛠️ 품질 관리 도구 설정 중..."
+
+# 기본 .NET 도구 설치
+dotnet tool install --global dotnet-reportgenerator-globaltool
+dotnet tool install --global Microsoft.CodeAnalysis.Metrics
+dotnet tool install --global dotnet-trace
+dotnet tool install --global dotnet-counters
+dotnet tool install --global dotnet-dump
+
+# 코드 품질 분석 도구
+dotnet tool install --global dotnet-sonarscanner
+
+# Git hooks 설정 (선택사항)
+cp quality-hooks/pre-commit .git/hooks/
+chmod +x .git/hooks/pre-commit
+
+echo "✅ 도구 설정 완료!"
+```
+
+### 📝 검토 보고서 자동 생성
+```csharp
+// ReportGenerator.cs - 검토 보고서 자동 생성 도구
+public class QualityReportGenerator
+{
+    public void GenerateReport(QualityMetrics metrics)
+    {
+        var template = File.ReadAllText("quality-report-template.md");
+        
+        template = template.Replace("{{총점}}", metrics.TotalScore.ToString());
+        template = template.Replace("{{등급}}", metrics.Grade);
+        template = template.Replace("{{커버리지}}", metrics.Coverage.ToString("P"));
+        template = template.Replace("{{5Line준수율}}", metrics.FiveLineCompliance.ToString("P"));
+        
+        File.WriteAllText($"quality-report-{DateTime.Now:yyyyMMdd}.md", template);
+    }
+}
+```
+
+---
+
+## 📋 검토자를 위한 실행 가이드
+
+### 🚀 검토 시작하기
+1. **환경 준비 (최초 1회)**
+   ```bash
+   # 도구 설치
+   ./setup-quality-tools.sh
+   
+   # 프로젝트 복제 및 의존성 설치
+   git clone [project-url]
+   cd [project-name]
+   dotnet restore
+   ```
+
+2. **매 검토 시 실행**
+   ```powershell
+   # 자동 품질 검증 실행
+   .\QualityCheck.ps1 -ProjectPath "." -OutputPath "quality-report"
+   
+   # 결과 확인
+   # - coverage/index.html (커버리지 보고서)
+   # - quality-report/ (종합 보고서)
+   ```
+
+### 📊 결과 해석 가이드
+- **커버리지 80% 미만**: 테스트 추가 필요
+- **5Line 위반 메서드**: 리팩토링 우선순위 표시
+- **성능 기준 미달**: 최적화 필요 영역 식별
+- **아키텍처 위반**: 즉시 수정 필요
+
+### 🎯 자주하는 실수 방지
+1. **체크리스트 건너뛰기 금지**
+   - 모든 항목을 순서대로 검토
+   - 측정 지표를 반드시 기록
+
+2. **자동화 도구 결과 신뢰**
+   - 수동 검증보다 도구 결과 우선
+   - 도구가 없는 항목만 수동 검토
+
+3. **문서화 필수**
+   - 모든 검토 결과를 기록
+   - 개선 사항은 구체적으로 작성
+
+---
+
+## 💡 검토 품질 개선 방안
+
+### 📈 검토 효율성 향상
+1. **템플릿 활용**
+   - 자동 생성된 보고서 템플릿 사용
+   - 반복 작업 최소화
+
+2. **체크리스트 개선**
+   - 프로젝트별 특화 항목 추가
+   - 측정 기준 구체화
+
+3. **도구 연계 강화**
+   - CI/CD 파이프라인 연동
+   - 자동 알림 시스템 구축
+
+### 🔍 검토 정확도 향상
+1. **크로스 체크**
+   - 2명 이상의 검토자가 독립적으로 검토
+   - 결과 비교 및 차이점 분석
+
+2. **이력 관리**
+   - 이전 검토 결과와 비교
+   - 개선 트렌드 추적
+
+3. **피드백 수집**
+   - 개발팀 피드백 정기 수집
+   - 체크리스트 지속 개선
+
+### 📚 지식 축적
+1. **베스트 프랙티스 문서화**
+   - 우수 사례 수집 및 공유
+   - 개선 전후 비교 자료
+
+2. **교육 프로그램**
+   - 정기적인 품질 교육
+   - 새로운 도구 및 기법 공유
+
+3. **커뮤니티 활동**
+   - 외부 컨퍼런스 참석
+   - 오픈소스 프로젝트 기여
+
+---
+
 **검토자**: ________________  
 **검토일**: ________________  
-**승인 여부**: [ 승인 / 조건부 승인 / 반려 ] 
+**소요시간**: ________________  
+**사용 도구**: ________________  
+**승인 여부**: [ 승인 / 조건부 승인 / 반려 ]  
+**다음 검토 예정일**: ________________ 
